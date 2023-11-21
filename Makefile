@@ -1,3 +1,4 @@
+
 # Define the default target now so that it is always the first target
 BUILD_TARGETS = \
 	main quantize quantize-stats perplexity embedding vdot q8dot train-text-from-scratch convert-llama2c-to-ggml \
@@ -114,9 +115,9 @@ endif
 #
 
 # keep standard at C11 and C++11
-MK_CPPFLAGS = -I. -Icommon
-MK_CFLAGS   = -std=c11   -fPIC
-MK_CXXFLAGS = -std=c++11 -fPIC
+MK_CPPFLAGS = -I. -Icommon -I/usr/local/lib/ocaml/
+MK_CFLAGS   = -std=c11   -fPIC -g
+MK_CXXFLAGS = -std=c++17 -fPIC -fpermissive -g
 
 # -Ofast tends to produce faster code, but may not be available for some compilers.
 ifdef LLAMA_FAST
@@ -506,7 +507,7 @@ ggml-metal.o: ggml-metal.m ggml-metal.h
 endif # LLAMA_METAL
 
 ifdef LLAMA_MPI
-ggml-mpi.o: ggml-mpi.c ggml-mpi.h
+ggml-mpi.o: ggml-mpi.cpp ggml-mpi.h
 	$(CC) $(CFLAGS) -c $< -o $@
 endif # LLAMA_MPI
 
@@ -541,17 +542,17 @@ $(info )
 # Build library
 #
 
-ggml.o: ggml.c ggml.h ggml-cuda.h
-	$(CC)  $(CFLAGS)   -c $< -o $@
+ggml.o: ggml.cpp ggml.h ggml-cuda.h
+	$(CXX)  $(CXXFLAGS)   -c $< -o $@
 
-ggml-alloc.o: ggml-alloc.c ggml.h ggml-alloc.h
-	$(CC)  $(CFLAGS)   -c $< -o $@
+ggml-alloc.o: ggml-alloc.cpp ggml.h ggml-alloc.h
+	$(CXX)  $(CXXFLAGS)   -c $< -o $@
 
-ggml-backend.o: ggml-backend.c ggml.h ggml-backend.h
-	$(CC)  $(CFLAGS)   -c $< -o $@
+ggml-backend.o: ggml-backend.cpp ggml.h ggml-backend.h
+	$(CXX)  $(CXXFLAGS)   -c $< -o $@
 
-ggml-quants.o: ggml-quants.c ggml.h ggml-quants.h
-	$(CC) $(CFLAGS)    -c $< -o $@
+ggml-quants.o: ggml-quants.cpp ggml.h ggml-quants.h
+	$(CXX) $(CXXFLAGS)    -c $< -o $@
 
 OBJS += ggml-alloc.o ggml-backend.o ggml-quants.o
 
@@ -586,11 +587,27 @@ clean:
 # Examples
 #
 
-main: examples/main/main.cpp                                  ggml.o llama.o $(COMMON_DEPS) console.o grammar-parser.o $(OBJS)
-	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LDFLAGS)
+main: examples/main/main.cpp  ocaml-example-script.o plugin_nodejs.o  plugin_ocaml.o  ggml.o llama.o $(COMMON_DEPS) console.o grammar-parser.o $(OBJS)
+	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LDFLAGS) /usr/lib/libnode.so -lzstd
+# /usr/local/lib/ocaml/libasmrun_pic.a /usr/local/lib/ocaml/libcamlrun_pic.a
 	@echo
 	@echo '====  Run ./main -h for help.  ===='
 	@echo
+#nasty hack
+# one of -pack, -a, -shared, -c, -output-obj
+ocaml-example-script.o: caml_src/step.ml
+	ocamlfind ocamlopt -verbose  -S -with-runtime -thread -linkpkg \
+	  -cclib -L/usr/lib/x86_64-linux-gnu/ \
+	-with-runtime \
+	-output-complete-obj \
+	-package  coq-core \
+	-package  yojson \
+	-package  coq \
+	-verbose \
+	-package coq-serapi  \
+	-package coq-serapi.serlib \
+	-package coq-serapi.sertop_v8_12 \
+	 -g -fPIC -linkall -output-obj caml_src/step.ml -o ocaml-example-script.o
 
 infill: examples/infill/infill.cpp                            ggml.o llama.o $(COMMON_DEPS) console.o grammar-parser.o $(OBJS)
 	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LDFLAGS)
@@ -682,6 +699,9 @@ common/build-info.cpp: $(wildcard .git/index) scripts/build-info.sh
 build-info.o: common/build-info.cpp
 	$(CXX) $(CXXFLAGS) -c $(filter-out %.h,$^) -o $@
 
+#print.o: print.cpp # print.hpp
+#	$(CXX) $(CXXFLAGS) -c $(filter-out %.h,$^) -o $@
+
 #
 # Tests
 #
@@ -738,5 +758,12 @@ tests/test-tokenizer-1-bpe: tests/test-tokenizer-1-bpe.cpp ggml.o llama.o $(COMM
 tests/test-tokenizer-1-llama: tests/test-tokenizer-1-llama.cpp ggml.o llama.o $(COMMON_DEPS) $(OBJS)
 	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LDFLAGS)
 
-tests/test-c.o: tests/test-c.c llama.h
-	$(CC) $(CFLAGS) -c $(filter-out %.h,$^) -o $@
+tests/test-rope: tests/test-rope.cpp ggml.o $(OBJS)
+	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LDFLAGS)
+
+tests/test-c.o: tests/test-c.cpp llama.h
+	$(CC) $(CXXFLAGS) -c $(filter-out %.h,$^) -o $@
+
+
+test123:
+	./build2/bin/main -m ~/.ollama/models/mistral --interactive -r STOP -p 'write simple python expression to be evaluated ending WITH TOKEN <GO>' -n -1

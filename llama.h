@@ -50,8 +50,13 @@
 #define LLAMA_SUPPORTS_GPU_OFFLOAD
 #endif
 
+static const size_t kiB = 1024;
+static const size_t MiB = 1024*kiB;
+static const size_t GiB = 1024*MiB;
+
+
 #ifdef __cplusplus
-extern "C" {
+//extern "C" {
 #endif
 
     //
@@ -116,12 +121,20 @@ extern "C" {
     };
 
     typedef struct llama_token_data {
+      llama_token_data( llama_token id, float logit,     float p):
+	id( id),logit(logit),p(p){      }
         llama_token id; // token id
         float logit;    // log-odds of the token
         float p;        // probability of the token
     } llama_token_data;
 
     typedef struct llama_token_data_array {
+      llama_token_data_array(llama_token_data * data,
+			     size_t size,
+			     bool sorted):
+	data(data),
+	size(size),
+	sorted(sorted){}
         llama_token_data * data;
         size_t size;
         bool sorted;
@@ -140,6 +153,29 @@ extern "C" {
     // - logits : if zero, the logits for the respective token will not be output
     //
     typedef struct llama_batch {
+
+      llama_batch(int32_t n_tokens,
+		  llama_token  *  token,
+		  float        *  embd,
+		  llama_pos    *  pos,
+		  int32_t      *  n_seq_id,
+		  llama_seq_id ** seq_id,
+		  int8_t       *  logits,
+		  llama_pos    all_pos_0,
+		  llama_pos    all_pos_1,
+		  llama_seq_id all_seq_id
+		  ) :
+	n_tokens(n_tokens),
+	token(token),
+	embd(embd),
+	pos(pos),
+	n_seq_id(n_seq_id),
+	seq_id(seq_id),
+	logits(logits),      
+	all_pos_0(all_pos_0),
+	all_pos_1(all_pos_1),
+	all_seq_id(all_seq_id) {}
+      
         int32_t n_tokens;
 
         llama_token  *  token;
@@ -175,7 +211,7 @@ extern "C" {
         bool use_mlock;  // force system to keep model in RAM
     };
 
-    struct llama_context_params {
+    struct llama_context_params{
         uint32_t seed;              // RNG seed, -1 for random
         uint32_t n_ctx;             // text context, 0 = from model
         uint32_t n_batch;           // prompt processing maximum batch size
@@ -239,6 +275,10 @@ extern "C" {
     };
 
     typedef struct llama_grammar_element {
+      llama_grammar_element(        enum llama_gretype type,
+				    uint32_t           value // Unicode code point or rule ID
+				    ):type(type), value(value){}
+      llama_grammar_element( ):type(llama_gretype(0)), value(0){}
         enum llama_gretype type;
         uint32_t           value; // Unicode code point or rule ID
     } llama_grammar_element;
@@ -832,7 +872,7 @@ extern "C" {
     LLAMA_API void llama_dump_timing_info_yaml(FILE * stream, const struct llama_context * ctx);
 
 #ifdef __cplusplus
-}
+//}
 #endif
 
 LLAMA_API std::string llama_token_to_piece(const struct llama_context * ctx, llama_token token);
@@ -851,4 +891,8 @@ const std::vector<std::pair<std::string, struct ggml_tensor *>> & llama_internal
 
 #endif // LLAMA_API_INTERNAL
 
+
+
 #endif // LLAMA_H
+
+

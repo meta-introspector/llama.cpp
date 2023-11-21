@@ -34,6 +34,14 @@
 #if defined(GGML_USE_KOMPUTE)
 #include "ggml-vulkan.h"
 #endif
+#include "print.hpp"
+//#include "plugin_python.hpp"
+//#include "plugin_nodejs.hpp"
+//#include "plugin_nodejs_metacall.hpp"
+#include "plugin_ocaml.hpp"
+#define process_output_plugin process_output_plugin_ocaml
+#define process_output_plugin_destroy process_output_plugin_ocaml_destroy
+#define process_output_plugin_init process_output_plugin_ocaml_init
 
 static llama_context           ** g_ctx;
 static llama_model             ** g_model;
@@ -103,10 +111,14 @@ static void sigint_handler(int signo) {
     }
 }
 #endif
+using namespace refl;
 
 int main(int argc, char ** argv) {
     gpt_params params;
     g_params = &params;
+
+    //using Td = type_descriptor<gpt_params>;
+
 
     if (!gpt_params_parse(argc, argv, params)) {
         return 1;
@@ -121,10 +133,12 @@ int main(int argc, char ** argv) {
 
     // TODO: Dump params ?
     //LOG("Params perplexity: %s\n", LOG_TOSTR(params.perplexity));
-
+    //print_fields(params);
+    
     // save choice to use color for later
     // (note for later: this is a slightly awkward choice)
     console::init(params.simple_io, params.use_color);
+    process_output_plugin_init();
     atexit([]() { console::cleanup(); });
 
     if (params.logits_all) {
@@ -167,8 +181,10 @@ int main(int argc, char ** argv) {
 
     std::mt19937 rng(params.seed);
     if (params.random_prompt) {
-        params.prompt = gpt_random_prompt(rng);
+      params.prompt = gpt_random_prompt(rng);
     }
+
+    auto start_prompt = process_output_plugin(params.prompt,"params",params.prompt);
 
     LOG("%s: llama backend init\n", __func__);
     llama_backend_init(params.numa);
@@ -242,6 +258,8 @@ int main(int argc, char ** argv) {
 
     std::vector<llama_token> embd_inp;
 
+    //print_fields(*model);
+	
     if (params.interactive_first || params.instruct || params.chatml || !params.prompt.empty() || session_tokens.empty()) {
         LOG("tokenize the prompt\n");
         if (params.chatml) {
@@ -285,7 +303,8 @@ int main(int argc, char ** argv) {
         LOG_TEE("%s: error: prompt is too long (%d tokens, max %d)\n", __func__, (int) embd_inp.size(), n_ctx - 4);
         return 1;
     }
-
+    //print_fields(*ctx);
+    //print_fields(session_tokens);
     // debug message about similarity of saved session, if applicable
     size_t n_matching_session_tokens = 0;
     if (!session_tokens.empty()) {
@@ -373,6 +392,10 @@ int main(int argc, char ** argv) {
             for (int i = 0; i < (int) guidance_inp.size(); i++) {
                 LOG_TEE("%6d -> '%s'\n", guidance_inp[i], llama_token_to_piece(ctx, guidance_inp[i]).c_str());
             }
+	    
+	    //print_fields(*ctx_guidance);
+
+
         }
 
         if (params.n_keep > 0) {
@@ -481,7 +504,8 @@ int main(int argc, char ** argv) {
     std::vector<llama_token> embd_guidance;
 
     struct llama_sampling_context * ctx_sampling = llama_sampling_init(sparams);
-
+    //print_fields(*ctx_sampling);
+    std::string last_output; // the output from python at any time    
     while ((n_remain != 0 && !is_antiprompt) || params.interactive) {
         // predict
         if (!embd.empty()) {
@@ -490,6 +514,7 @@ int main(int argc, char ** argv) {
             int max_embd_size = n_ctx - 4;
 
             // Ensure the input doesn't exceed the context size by truncating embd if necessary.
+	    //print_fields(embd);
             if ((int) embd.size() > max_embd_size) {
                 const int skipped_tokens = (int) embd.size() - max_embd_size;
                 embd.resize(max_embd_size);
@@ -516,6 +541,7 @@ int main(int argc, char ** argv) {
                 LOG("context full, swapping: n_past = %d, n_left = %d, n_ctx = %d, n_keep = %d, n_discard = %d\n",
                     n_past, n_left, n_ctx, params.n_keep, n_discard);
 
+		//print_fields(*ctx);
                 llama_kv_cache_seq_rm   (ctx, 0, params.n_keep + 1            , params.n_keep + n_discard + 1);
                 llama_kv_cache_seq_shift(ctx, 0, params.n_keep + 1 + n_discard, n_past, -n_discard);
 
@@ -588,7 +614,7 @@ int main(int argc, char ** argv) {
                     int n_eval = std::min(input_size - i, params.n_batch);
                     if (llama_decode(ctx_guidance, llama_batch_get_one(input_buf + i, n_eval, n_past_guidance, 0))) {
                         LOG_TEE("%s : failed to eval\n", __func__);
-                        return 1;
+                        //return 1;
                     }
 
                     n_past_guidance += n_eval;
@@ -632,7 +658,7 @@ int main(int argc, char ** argv) {
             }
 
             const llama_token id = llama_sampling_sample(ctx_sampling, ctx, ctx_guidance);
-
+	    //print_fields(id);
             llama_sampling_accept(ctx_sampling, ctx, id, true);
 
             LOG("last: %s\n", LOG_TOKENS_TOSTR_PRETTY(ctx, ctx_sampling->prev).c_str());
@@ -667,8 +693,10 @@ int main(int argc, char ** argv) {
         if (input_echo) {
             for (auto id : embd) {
                 const std::string token_str = llama_token_to_piece(ctx, id);
-                printf("%s", token_str.c_str());
+                printf("\nTOKEN:%s\n", token_str.c_str());
 
+		//print_fields(id);
+		
                 if (embd.size() > 1) {
                     input_tokens.push_back(id);
                 } else {
@@ -683,12 +711,20 @@ int main(int argc, char ** argv) {
             console::set_display(console::reset);
         }
 
+	// just print the whole thing       	
+	const std::string last_output1 = output_ss.str();
+	printf("%s",last_output1.c_str());
+	last_output = process_output_plugin(start_prompt,"statement",last_output1);
+	printf("\nLASTOUTPUT: '%s'\n",last_output.c_str());
+		    
         // if not currently processing queued inputs;
         if ((int) embd_inp.size() <= n_consumed) {
             // check for reverse prompt in the last n_prev tokens
             if (!params.antiprompt.empty()) {
                 const int n_prev = 32;
-                const std::string last_output = llama_sampling_prev_str(ctx_sampling, ctx, n_prev);
+                const std::string last_output1 = llama_sampling_prev_str(ctx_sampling, ctx, n_prev);
+		// now plugin the python :
+		const std::string partial_output = process_output_plugin(start_prompt,"antiprompt",last_output1);
 
                 is_antiprompt = false;
                 // Check if each of the reverse prompts appears at the end of the output.
@@ -755,11 +791,17 @@ int main(int argc, char ** argv) {
                 console::set_display(console::user_input);
 
                 std::string line;
-                bool another_line = true;
-                do {
-                    another_line = console::readline(line, params.multiline_input);
-                    buffer += line;
-                } while (another_line);
+                //bool another_line = true;
+                //do {
+		//  another_line = console::readline(line, params.multiline_input);
+
+		for (const auto & antiprompt : params.antiprompt) {
+		  size_t found_pos = last_output.find(antiprompt);
+		  if (found_pos != string::npos) {
+		  last_output.erase(found_pos,found_pos+ antiprompt.length());		  }
+		}
+		buffer += last_output;
+		//} while (another_line);
 
                 // done taking input, reset color
                 console::set_display(console::reset);
@@ -858,6 +900,9 @@ int main(int argc, char ** argv) {
     llama_print_timings(ctx);
     write_logfile(ctx, params, model, input_tokens, output_ss.str(), output_tokens);
 
+    // dont dump core
+    //int *ptr = 0; *ptr = 1;
+    
     if (ctx_guidance) { llama_free(ctx_guidance); }
     llama_free(ctx);
     llama_free_model(model);
@@ -869,5 +914,6 @@ int main(int argc, char ** argv) {
     LOG_TEE("Log end\n");
 #endif // LOG_DISABLE_LOGS
 
+    process_output_plugin_destroy();
     return 0;
 }
