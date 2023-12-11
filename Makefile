@@ -588,13 +588,19 @@ clean:
 #
 
 main: examples/main/main.cpp  ocaml-example-script.o plugin_nodejs.o  plugin_ocaml.o  ggml.o llama.o $(COMMON_DEPS) console.o grammar-parser.o $(OBJS)
-	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LDFLAGS) /usr/lib/libnode.so /usr/local/lib/ocaml/libasmrun_pic.a -lzstd
+	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LDFLAGS) /usr/lib/libnode.so /usr/local/lib/ocaml/libasmrun_pic.a /usr/local/lib/ocaml/libcamlrun_pic.a -lzstd
 	@echo
 	@echo '====  Run ./main -h for help.  ===='
 	@echo
 #nasty hack
 ocaml-example-script.o: caml_src/step.ml
-	ocamlopt -g -fPIC -linkall -output-obj caml_src/step.ml -o ocaml-example-script.o
+	ocamlfind ocamlopt -thread -linkpkg \
+	-package  coq-core \
+	-package  coq \
+	-package coq-serapi  \
+	-package coq-serapi.serlib \
+	-package coq-serapi.sertop_v8_12 \
+	 -g -fPIC -linkall -output-obj caml_src/step.ml -o ocaml-example-script.o
 
 infill: examples/infill/infill.cpp                            ggml.o llama.o $(COMMON_DEPS) console.o grammar-parser.o $(OBJS)
 	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LDFLAGS)
