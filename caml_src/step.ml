@@ -37,18 +37,20 @@ open Unification
 open Util
 open Vars
 open! Sexplib.Conv
+open Yojson
+    
 module Loc = Serlib.Ser_loc
 module Names = Serlib.Ser_names
 module Evar = Serlib.Ser_evar
 module Parsable = Pcoq.Parsable
 module Evar_kinds = Serlib.Ser_evar_kinds
-
-
+let vernac_pperr_endline2 = CDebug.create ~name:"vernacinterp2" ()
+    
 let get_default_proof_mode()=
   match Pvernac.lookup_proof_mode "Noedit" with
     Some x -> x;;
 
-let step (s:string ) =
+let step (s:string ) : string =
   coq_init
     {
       fb_handler = (fun _ _ -> ())  (* XXXX *);
@@ -65,14 +67,33 @@ let step (s:string ) =
   let s1 = (Stream.of_string s) in
   let pa = Pcoq.Parsable.make s1 in
   try
-    Vernacstate.Parser.parse p1 (Pvernac.main_entry (Some (get_default_proof_mode ()))) pa;
-    s ^ "Hello Ocaml1\n";
-  with Gramlib.Grammar.Error x->
-    Printf.printf "error1: '%s'" x;
- 
-    Printf.printf "test: '%s'" s;
-  flush stdout;
-  s ^ "Hello Ocaml\n";;
+    let ff = Vernacstate.Parser.parse p1 (Pvernac.main_entry (Some (get_default_proof_mode ()))) pa in 
+    Printf.printf "in token test: '%s'" s;
+
+    match ff with
+    |Some x -> vernac_pperr_endline2 Pp.(fun () -> str "interpreting: " ++ Ppvernac.pr_vernac x); Printf.printf "something"; "token"
+    | None ->     Printf.printf "no data"; "Nope";
+
+
+    flush stdout;
+    "DONE:" ^ s ^ "OUTPUT:\n";
+
+  with
+  | Gramlib.Grammar.Error x->
+    (*    Printf.printf "error1 p1: '%s'" p1;*)
+    (*    Printf.printf "error1 pa: '%s'" pa;*)
+    Printf.printf "error1 error: '%s'" x;
+    Printf.printf "error1 input: '%s'" s;
+    flush stdout;
+    "return err1 ";
+  | CLexer.Error.E x ->    
+    Printf.printf "error2 error: '%s'" (CLexer.Error.to_string x);
+    Printf.printf "error2 input: '%s'" s;
+    flush stdout;
+    "return err2 ";
+    
+    "return value ";;
+
 let init () =
     Printf.printf "Initializing Game module...\n";
     flush stdout;;

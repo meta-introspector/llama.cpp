@@ -601,6 +601,7 @@ ocaml-example-script.o: caml_src/step.ml
 	-with-runtime \
 	-output-complete-obj \
 	-package  coq-core \
+	-package  yojson \
 	-package  coq \
 	-verbose \
 	-package coq-serapi  \
