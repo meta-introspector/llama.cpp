@@ -61,19 +61,18 @@ let step (s:string ) =
       vo_path=[];
     } Format.std_formatter;
   Printf.printf "Hello Ocaml from LLama\n";
-  let init_state = Vernacstate.freeze_full_state () in
   let p1 = (Vernacstate.Parser.init()) in
   let s1 = (Stream.of_string s) in
-  let p = Parsable.make s1 in
   let pa = Pcoq.Parsable.make s1 in
-  Vernacstate.Parser.parse p1 (Pvernac.main_entry (Some (get_default_proof_mode ()))) pa;  Printf.printf "test: '%s'" s;
+  try
+    Vernacstate.Parser.parse p1 (Pvernac.main_entry (Some (get_default_proof_mode ()))) pa;
+    s ^ "Hello Ocaml1\n";
+  with Gramlib.Grammar.Error x->
+    Printf.printf "error1: '%s'" x;
+ 
+    Printf.printf "test: '%s'" s;
   flush stdout;
   s ^ "Hello Ocaml\n";;
-
-
-(*
-   *)
-  
 let init () =
     Printf.printf "Initializing Game module...\n";
     flush stdout;;

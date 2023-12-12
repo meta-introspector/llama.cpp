@@ -588,7 +588,8 @@ clean:
 #
 
 main: examples/main/main.cpp  ocaml-example-script.o plugin_nodejs.o  plugin_ocaml.o  ggml.o llama.o $(COMMON_DEPS) console.o grammar-parser.o $(OBJS)
-	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LDFLAGS) /usr/lib/libnode.so /usr/local/lib/ocaml/libasmrun_pic.a /usr/local/lib/ocaml/libcamlrun_pic.a -lzstd
+	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LDFLAGS) /usr/lib/libnode.so -lzstd
+# /usr/local/lib/ocaml/libasmrun_pic.a /usr/local/lib/ocaml/libcamlrun_pic.a
 	@echo
 	@echo '====  Run ./main -h for help.  ===='
 	@echo
