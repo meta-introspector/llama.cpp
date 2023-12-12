@@ -121,16 +121,18 @@ int main(int argc, char ** argv) {
         for (int32_t i = 0; i < (int32_t) batch.n_tokens; i += n_batch) {
             const int32_t n_tokens = std::min(n_batch, (int32_t) (batch.n_tokens - i));
 
-            llama_batch batch_view = {
-                n_tokens,
-                batch.token    + i,
-                nullptr,
-                batch.pos      + i,
-                batch.n_seq_id + i,
-                batch.seq_id   + i,
-                batch.logits   + i,
-                0, 0, 0, // unused
-            };
+            llama_batch batch_view(
+	      /* .n_tokens= */ n_tokens,
+	      /* .token=    */  batch.token    + i,
+	      /* .embd=     */ nullptr,
+	      /* .pos= */      batch.pos      + i,
+              /* .n_seq_id= */ batch.n_seq_id + i,
+	      /* .seq_id= */ batch.seq_id   + i,
+	      /* .logits= */ batch.logits   + i,
+	      /* .all_pos_0= */0,
+	      /* .all_pos_1= */0,
+	      /* .all_seq_id= */0 // unused
+				   );
 
             const int ret = llama_decode(ctx, batch_view);
             if (ret != 0) {
@@ -155,7 +157,7 @@ int main(int argc, char ** argv) {
     }
 
     LOG_TEE("\n");
-    LOG_TEE("%s: n_kv_max = %d, is_pp_shared = %d, n_gpu_layers = %d, mmq = %d\n", __func__, n_kv_max, is_pp_shared, n_gpu_layers, mmq);
+    LOG_TEE("%s: n_kv_max = %d, is_pp_shared = %d, n_gpu_layers = %d, mmq = %d, n_threads = %d, n_threads_batch = %d\n", __func__, n_kv_max, is_pp_shared, n_gpu_layers, mmq, ctx_params.n_threads, ctx_params.n_threads_batch);
     LOG_TEE("\n");
 
     LOG_TEE("|%6s | %6s | %4s | %6s | %8s | %8s | %8s | %8s | %8s | %8s |\n", "PP",     "TG",     "B",    "N_KV",     "T_PP s",   "S_PP t/s", "T_TG s",   "S_TG t/s", "T s",      "S t/s");

@@ -75,7 +75,18 @@ bool llava_eval_image_embed(llama_context * ctx_llama, const struct llava_image_
         if (n_eval > n_batch) {
             n_eval = n_batch;
         }
-        llama_batch batch = {int32_t(n_eval), nullptr, (image_embed->embed+i*n_embd), nullptr, nullptr, nullptr, nullptr, *n_past, 1, 0, };
+        llama_batch batch(
+			  /* .n_tokens= */int32_t(n_eval),
+	  /* .token= */nullptr,
+	  /* .embd= */(image_embed->embed+i*n_embd),
+	  /* .pos= */nullptr,
+	  /* .n_seq_id= */nullptr,
+	  /* .seq_id= */nullptr,
+	  /* .logits= */nullptr,
+	  /* .all_pos_0= */*n_past,
+	  /* .all_pos_1= */1,
+	  /* .all_seq_id= */0
+			  );
         if (llama_decode(ctx_llama, batch)) {
             fprintf(stderr, "%s : failed to eval\n", __func__);
             return false;
@@ -127,7 +138,14 @@ static bool load_file_to_bytes(const char* path, unsigned char** bytesOut, long 
         fclose(file);
         return false;
     }
-    fread(buffer, 1, fileSize, file); // Read the file into the buffer
+    errno = 0;
+    size_t ret = fread(buffer, 1, fileSize, file); // Read the file into the buffer
+    if (ferror(file)) {
+        die_fmt("read error: %s", strerror(errno));
+    }
+    if (ret != (size_t) fileSize) {
+        die("unexpectedly reached end of file");
+    }
     fclose(file); // Close the file
 
     *bytesOut = buffer;

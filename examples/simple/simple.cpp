@@ -75,7 +75,7 @@ int main(int argc, char ** argv) {
     // make sure the KV cache is big enough to hold all the prompt and generated tokens
     if (n_kv_req > n_ctx) {
         LOG_TEE("%s: error: n_kv_req > n_ctx, the required KV cache size is not big enough\n", __func__);
-        LOG_TEE("%s:        either reduce n_parallel or increase n_ctx\n", __func__);
+        LOG_TEE("%s:        either reduce n_len or increase n_ctx\n", __func__);
         return 1;
     }
 
@@ -124,10 +124,15 @@ int main(int argc, char ** argv) {
             candidates.reserve(n_vocab);
 
             for (llama_token token_id = 0; token_id < n_vocab; token_id++) {
-                candidates.emplace_back(llama_token_data{ token_id, logits[token_id], 0.0f });
+	      candidates.emplace_back(llama_token_data( token_id,
+							logits[token_id],
+							0.0f ));
             }
 
-            llama_token_data_array candidates_p = { candidates.data(), candidates.size(), false };
+            llama_token_data_array candidates_p(
+						candidates.data(),
+						candidates.size(),
+						false );
 
             // sample the most likely token
             const llama_token new_token_id = llama_sample_token_greedy(ctx, &candidates_p);

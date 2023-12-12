@@ -1,8 +1,75 @@
 cmake_minimum_required(VERSION 3.13)  # for add_link_options
 project("llama.cpp" C CXX)
+find_package (Python3 COMPONENTS Interpreter Development)
+execute_process(COMMAND "ocamlopt" "-where" OUTPUT_VARIABLE OCAMLC_WHERE ERROR_QUIET OUTPUT_STRIP_TRAILING_WHITESPACE)
+#set(OCAML_RUNTIMELIBRARY "${OCAMLC_WHERE}/libasmrun_pic.a")
 
+if (Python3_Interpreter_FOUND)
+  if (UNIX AND NOT APPLE)
+    if (PYTHON_VERSION_MAJOR EQUAL 3)
+        FIND_PACKAGE(Boost COMPONENTS python${PYTHON_VERSION_SUFFIX})
+#        FIND_PACKAGE(PythonInterp 3)
+#        FIND_PACKAGE(PythonLibs 3 REQUIRED)
+    else()
+        FIND_PACKAGE(Boost COMPONENTS python)
+ #       FIND_PACKAGE(PythonInterp)
+ #       FIND_PACKAGE(PythonLibs REQUIRED)
+    endif()
+  else()	
+    if (PYTHON_VERSION_MAJOR EQUAL 3)
+        FIND_PACKAGE(Boost COMPONENTS python${PYTHON_VERSION_MAJOR}${PYTHON_VERSION_MINOR})
+        FIND_PACKAGE(PythonInterp 3)
+        FIND_PACKAGE(PythonLibs 3 REQUIRED)
+    else()
+        FIND_PACKAGE(Boost COMPONENTS python${PYTHON_VERSION_MAJOR}${PYTHON_VERSION_MINOR})
+        FIND_PACKAGE(PythonInterp)
+        FIND_PACKAGE(PythonLibs REQUIRED)
+    endif()
+  endif()
+else()
+    message("Python not found")
+endif()
+
+message(STATUS "PYTHON_LIBRARIES = ${Python3_LIBRARIES}")
+message(STATUS "PYTHON_EXECUTABLE = ${PYTHON_EXECUTABLE}")
+message(STATUS "PYTHON_INCLUDE_DIRS = ${Python3_INCLUDE_DIRS}")
+message(STATUS "Boost_LIBRARIES = ${Boost_LIBRARIES}")
+
+ENABLE_TESTING()
+INCLUDE_DIRECTORIES(${Boost_INCLUDE_DIRS} ${Python3_INCLUDE_DIRS})
+LINK_LIBRARIES(${Boost_LIBRARIES} ${Python3_LIBRARIES} ) # Deprecated but so convenient!
+
+#PYTHON_ADD_MODULE(plugin_python plugin_python.cpp)
+Python3_add_library(plugin_python MODULE plugin_python.cpp)
+
+if (NOT MSVC)
+    set(cuda_flags -Wno-pedantic)
+endif()
+
+set(LLAMA_CUBLAS ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+set(LLAMA_CUDA_F16 ON)
+set(LLAMA_ACCELERATE ON)
+set(LLAMA_K_QUANTS ON)
 
+#-DLLAMA_NATIVE=off
+set(LLAMA_AVX ON)
+set(LLAMA_AVX2 OFF)
+set(LLAMA_AVX512 OFF)
+set(LLAMA_FMA OFF)
+set(LLAMA_F16C OFF)
+set(CMAKE_CUDA_FLAGS "--verbose") #
+set(CMAKE_CUDA_ARCHITECTURES "60;61;70") # needed for f16 CUDA intrinsics
+set(CUDACXX /usr/local/cuda-12.3/bin/nvcc)
+set(CMAKE_CUDA_COMPILER /usr/local/cuda-12.3/bin/nvcc)
+set(CUDA_TOOLKIT_ROOT_DIR /usr/local/cuda-12.3)
+#GGML_USE_CUBLAS
+
+#set(CMAKE_EXE_LINKER_FLAGS -pg)
+#set(CMAKE_SHARED_LINKER_FLAGS -pg)
+
+set(CMAKE_BUILD_TYPE Debug CACHE STRING "Build type" FORCE)
+    
 if (NOT XCODE AND NOT MSVC AND NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
     set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "Debug" "Release" "MinSizeRel" "RelWithDebInfo")
@@ -43,8 +110,9 @@ else()
 endif()
 
 # general
+option(BUILD_SHARED_LIBS                "build shared libraries"                                OFF)
 option(LLAMA_STATIC                     "llama: static link libraries"                          OFF)
-option(LLAMA_NATIVE                     "llama: enable -march=native flag"                      ON)
+option(LLAMA_NATIVE                     "llama: enable -march=native flag"                      OFF)
 option(LLAMA_LTO                        "llama: enable link time optimization"                  OFF)
 
 # debug
@@ -77,9 +145,9 @@ endif()
 
 # 3rd party libs
 option(LLAMA_ACCELERATE                      "llama: enable Accelerate framework"               ON)
-option(LLAMA_BLAS                            "llama: use BLAS"                                  OFF)
+option(LLAMA_BLAS                            "llama: use BLAS"                                  ON)
 set(LLAMA_BLAS_VENDOR "Generic" CACHE STRING "llama: BLAS library vendor")
-option(LLAMA_CUBLAS                          "llama: use CUDA"                                  OFF)
+option(LLAMA_CUBLAS                          "llama: use CUDA"                                  ON)
 #option(LLAMA_CUDA_CUBLAS                     "llama: use cuBLAS for prompt processing"          OFF)
 option(LLAMA_CUDA_FORCE_DMMV                 "llama: use dmmv instead of mmvq CUDA kernels"     OFF)
 option(LLAMA_CUDA_FORCE_MMQ                  "llama: use mmq kernels instead of cuBLAS"         OFF)
@@ -100,17 +168,25 @@ option(LLAMA_BUILD_TESTS                "llama: build tests"    ${LLAMA_STANDALO
 option(LLAMA_BUILD_EXAMPLES             "llama: build examples" ${LLAMA_STANDALONE})
 option(LLAMA_BUILD_SERVER               "llama: build server example"                           ON)
 
+# Required for relocatable CMake package
+include(${CMAKE_CURRENT_SOURCE_DIR}/scripts/build-info.cmake)
+
 #
 # Compile flags
 #
 
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED true)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED true)
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
 include(CheckCXXCompilerFlag)
+
+# enable libstdc++ assertions for debug builds
+if (CMAKE_SYSTEM_NAME MATCHES "Linux")
+    add_compile_definitions($<$<CONFIG:Debug>:_GLIBCXX_ASSERTIONS>)
+endif()
 
 if (NOT MSVC)
     if (LLAMA_SANITIZE_THREAD)
@@ -161,7 +237,7 @@ if (LLAMA_METAL)
     #add_compile_definitions(GGML_METAL_DIR_KERNELS="${CMAKE_CURRENT_SOURCE_DIR}/")
 
     # copy ggml-metal.metal to bin directory
-    configure_file(ggml-metal.metal bin/ggml-metal.metal COPYONLY)
+    configure_file(ggml-metal.metal ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ggml-metal.metal COPYONLY)
 
     set(LLAMA_EXTRA_LIBS ${LLAMA_EXTRA_LIBS}
         ${FOUNDATION_LIBRARY}
@@ -230,11 +306,17 @@ if (LLAMA_BLAS)
 
         message(STATUS "BLAS found, Includes: ${BLAS_INCLUDE_DIRS}")
         add_compile_options(${BLAS_LINKER_FLAGS})
-        add_compile_definitions(GGML_USE_OPENBLAS)
+
+	# from https://github.com/NVIDIA/cutlass
+	make_directory("${PROJECT_BINARY_DIR}/nvcc_tmp")
+	set(cuda_flags --keep "SHELL:--keep-dir ${PROJECT_BINARY_DIR}/nvcc_tmp" ${cuda_flags})
+
+	#        add_compile_definitions(GGML_USE_OPENBLAS)
         if (${BLAS_INCLUDE_DIRS} MATCHES "mkl" AND (${LLAMA_BLAS_VENDOR} MATCHES "Generic" OR ${LLAMA_BLAS_VENDOR} MATCHES "Intel"))
             add_compile_definitions(GGML_BLAS_USE_MKL)
         endif()
         set(LLAMA_EXTRA_LIBS ${LLAMA_EXTRA_LIBS} ${BLAS_LIBRARIES})
+
         set(LLAMA_EXTRA_INCLUDES ${LLAMA_EXTRA_INCLUDES} ${BLAS_INCLUDE_DIRS})
 
     else()
@@ -272,6 +354,7 @@ if (LLAMA_CUBLAS)
         endif()
         add_compile_definitions(GGML_CUDA_DMMV_X=${LLAMA_CUDA_DMMV_X})
         add_compile_definitions(GGML_CUDA_MMV_Y=${LLAMA_CUDA_MMV_Y})
+
         if (DEFINED LLAMA_CUDA_DMMV_Y)
             add_compile_definitions(GGML_CUDA_MMV_Y=${LLAMA_CUDA_DMMV_Y}) # for backwards compatibility
         endif()
@@ -312,7 +395,7 @@ if (LLAMA_MPI)
     if (MPI_C_FOUND)
         message(STATUS "MPI found")
         set(GGML_HEADERS_MPI ggml-mpi.h)
-        set(GGML_SOURCES_MPI ggml-mpi.c ggml-mpi.h)
+        set(GGML_SOURCES_MPI ggml-mpi.cpp ggml-mpi.h)
         add_compile_definitions(GGML_USE_MPI)
         add_compile_definitions(${MPI_C_COMPILE_DEFINITIONS})
         if (NOT MSVC)
@@ -390,14 +473,15 @@ endif()
 
 if (LLAMA_ALL_WARNINGS)
     if (NOT MSVC)
-        set(warning_flags -Wall -Wextra -Wpedantic -Wcast-qual -Wno-unused-function)
+    # -Wpedantic
+        set(warning_flags -Wall -Wextra  -Wcast-qual -Wno-unused-function)
         set(c_flags -Wshadow -Wstrict-prototypes -Wpointer-arith -Wmissing-prototypes -Werror=implicit-int -Werror=implicit-function-declaration)
-        set(cxx_flags -Wmissing-declarations -Wmissing-noreturn)
+        set(cxx_flags -Wmissing-declarations -Wmissing-noreturn -fpermissive)
         set(host_cxx_flags "")
 
         if (CMAKE_C_COMPILER_ID MATCHES "Clang")
             set(warning_flags ${warning_flags} -Wunreachable-code-break -Wunreachable-code-return)
-            set(host_cxx_flags ${host_cxx_flags} -Wmissing-prototypes -Wextra-semi)
+            set(host_cxx_flags ${host_cxx_flags} -Wmissing-prototypes -Wextra-semi -fpermissive)
 
             if (
                 (CMAKE_C_COMPILER_ID STREQUAL "Clang"      AND CMAKE_C_COMPILER_VERSION VERSION_GREATER_EQUAL 3.8.0) OR
@@ -407,36 +491,36 @@ if (LLAMA_ALL_WARNINGS)
             endif()
         elseif (CMAKE_C_COMPILER_ID STREQUAL "GNU")
             set(c_flags ${c_flags} -Wdouble-promotion)
-            set(host_cxx_flags ${host_cxx_flags} -Wno-array-bounds)
+            set(host_cxx_flags ${host_cxx_flags} -Wno-array-bounds -fpermissive)
 
             if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 7.1.0)
-                set(host_cxx_flags ${host_cxx_flags} -Wno-format-truncation)
+                set(host_cxx_flags ${host_cxx_flags} -Wno-format-truncation -fpermissive)
             endif()
             if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 8.1.0)
-                set(host_cxx_flags ${host_cxx_flags} -Wextra-semi)
+                set(host_cxx_flags ${host_cxx_flags} -Wextra-semi -fpermissive)
             endif()
         endif()
     else()
         # todo : msvc
     endif()
 
-    set(c_flags   ${c_flags}   ${warning_flags})
-    set(cxx_flags ${cxx_flags} ${warning_flags})
+    set(c_flags   ${c_flags}  -save-temps  -fPIC  --verbose  ${warning_flags})
+    set(cxx_flags ${cxx_flags} -fpermissive -fPIC  -save-temps --verbose ${warning_flags})
     add_compile_options("$<$<COMPILE_LANGUAGE:C>:${c_flags}>"
                         "$<$<COMPILE_LANGUAGE:CXX>:${cxx_flags}>"
                         "$<$<COMPILE_LANGUAGE:CXX>:${host_cxx_flags}>")
 
 endif()
 
-if (NOT MSVC)
-    set(cuda_flags -Wno-pedantic)
-endif()
 set(cuda_flags ${cxx_flags} -use_fast_math ${cuda_flags})
 
 list(JOIN host_cxx_flags " " cuda_host_flags)  # pass host compiler flags as a single argument
 if (NOT cuda_host_flags STREQUAL "")
     set(cuda_flags ${cuda_flags} -Xcompiler ${cuda_host_flags})
 endif()
+
+# 
+set(cuda_flags --verbose -G  ${cuda_flags})
 
 add_compile_options("$<$<COMPILE_LANGUAGE:CUDA>:${cuda_flags}>")
 
@@ -458,6 +542,15 @@ if (LLAMA_LTO)
     endif()
 endif()
 
+# this version of Apple ld64 is buggy
+execute_process(
+    COMMAND ${CMAKE_C_COMPILER} ${CMAKE_EXE_LINKER_FLAGS} -Wl,-v
+    ERROR_VARIABLE output
+)
+if (output MATCHES "dyld-1015\.7")
+    add_compile_definitions(HAVE_BUGGY_APPLE_LINKER)
+endif()
+
 # Architecture specific
 # TODO: probably these flags need to be tweaked on some architectures
 #       feel free to update the Makefile for your architecture and send a pull request or issue
@@ -476,8 +569,10 @@ if (NOT MSVC)
             add_link_options(-static-libgcc -static-libstdc++)
         endif()
     endif()
+    add_link_options("-Wl,-Map=${TARGET}.map")
+
     if (LLAMA_GPROF)
-        add_compile_options(-pg)
+      add_compile_options(-pg)
     endif()
 endif()
 
@@ -565,8 +660,12 @@ elseif (${CMAKE_SYSTEM_PROCESSOR} MATCHES "^(x86_64|i686|AMD64)$" OR "${CMAKE_GE
     endif()
 elseif (${CMAKE_SYSTEM_PROCESSOR} MATCHES "ppc64")
     message(STATUS "PowerPC detected")
-    add_compile_options(-mcpu=native -mtune=native)
-    #TODO: Add  targets for Power8/Power9 (Altivec/VSX) and Power10(MMA) and query for big endian systems (ppc64/le/be)
+    if (${CMAKE_SYSTEM_PROCESSOR} MATCHES "ppc64le")
+        add_compile_options(-mcpu=powerpc64le)
+    else()
+        add_compile_options(-mcpu=native -mtune=native)
+        #TODO: Add  targets for Power8/Power9 (Altivec/VSX) and Power10(MMA) and query for big endian systems (ppc64/le/be)
+    endif()
 else()
     message(STATUS "Unknown architecture")
 endif()
@@ -631,14 +730,32 @@ if (GGML_USE_CPU_HBM)
     find_library(memkind memkind REQUIRED)
 endif()
 
+#/usr/local/lib/ocaml/
+set(CMAKE_LIBRARY_PATH ${CMAKE_LIBRARY_PATH}   /usr/local/lib/ocaml)
+
+
+add_library(libmetacalld SHARED IMPORTED)
+add_dependencies(libmetacalld metacall)
+set_property(
+	TARGET libmetacalld
+	PROPERTY IMPORTED_LOCATION ${CMAKE_INSTALL_PREFIX}/lib/${CMAKE_SHARED_LIBRARY_PREFIX}metacalld${CMAKE_SHARED_LIBRARY_SUFFIX}
+)
+
 add_library(ggml OBJECT
-            ggml.c
+            ggml.cpp
             ggml.h
-            ggml-alloc.c
+	    print.hpp
+	    plugin_python.cpp
+	    plugin_nodejs.cpp
+	    plugin_nodejs_metacall.cpp
+	    plugin_ocaml.cpp
+	    ggml-internal.hpp
+	    llama-internal.hpp
+            ggml-alloc.cpp
             ggml-alloc.h
-            ggml-backend.c
+            ggml-backend.cpp
             ggml-backend.h
-            ggml-quants.c
+            ggml-quants.cpp
             ggml-quants.h
             ${GGML_SOURCES_CUDA} ${GGML_HEADERS_CUDA}
             ${GGML_SOURCES_OPENCL} ${GGML_HEADERS_OPENCL}
@@ -647,9 +764,35 @@ add_library(ggml OBJECT
             ${GGML_SOURCES_EXTRA} ${GGML_HEADERS_EXTRA}
             )
 
-target_include_directories(ggml PUBLIC . ${LLAMA_EXTRA_INCLUDES})
-target_compile_features(ggml PUBLIC c_std_11) # don't bump
-target_link_libraries(ggml PUBLIC Threads::Threads ${LLAMA_EXTRA_LIBS})
+set(LLAMA_EXTRA_INCLUDES ${LLAMA_EXTRA_INCLUDES} "/usr/local/lib/ocaml/")
+target_include_directories(ggml PUBLIC "/usr/include/node/" . ${LLAMA_EXTRA_INCLUDES}  )
+
+# 
+#   "/usr/local/lib/ocaml/libasmrun.a"
+#	  "/usr/local/lib/ocaml/libcamlrun.a"
+target_compile_features(ggml PUBLIC c_std_23) # always bump
+			   # /usr/local/lib/ocaml/libcamlrun_pic.a
+			   # /usr/local/lib/ocaml/libasmrund.a
+			   # /usr/local/lib/ocaml/libasmrun.a
+			   # /usr/local/lib/ocaml/libasmrund.a
+			   # /usr/local/lib/ocaml/libasmruni.a
+			   #			   #/usr/local/lib/ocaml/libcamlrund.a
+
+#/usr/bin/c++                 -Wall -Wextra -fno-strict-aliasing -fno-rtti -fno-exceptions -D GLIBCXX_FORCE_NEW -fPIC -g          -O0 -g3 -pg -rdynamic CMakeFiles/Cppcamlexample.dir/app/MainLoop.cpp.o CMakeFiles/Cppcamlexample.dir/app/main.cpp.o -o Cppcamlexample  -Wl,-rpath,/home/mdupont/2023/12/09/Cppcamlexample/build -ldl -lm /usr/local/lib/ocaml/libasmrun_pic.a -Wl,-Bstatic  -Wl,-Bdynamic libCppcamlexampleEngine.so game.o -ldl -lm 
+
+
+target_link_libraries(ggml PUBLIC Threads::Threads ${LLAMA_EXTRA_LIBS}  libmetacalld
+			   
+			   /usr/local/lib/libzstd.a 
+			   "${CMAKE_CURRENT_SOURCE_DIR}/build2/ocaml-example-script.o"
+			   /usr/local/lib/ocaml/libasmrun_pic.a
+			   
+			   #/usr/local/lib/ocaml/libcamlrun.a )
+			   #/usr/local/lib/ocaml/libasmrun_pic.a
+					  #
+			   #/usr/local/lib/ocaml/libcamlrun_pic.a
+			   )
+# /usr/local/lib/ocaml/libcamlrun.a
 if (GGML_USE_CPU_HBM)
     target_link_libraries(ggml PUBLIC memkind)
 endif()
@@ -670,10 +813,15 @@ add_library(llama
             )
 
 target_include_directories(llama PUBLIC .)
-target_compile_features(llama PUBLIC cxx_std_11) # don't bump
+target_compile_features(llama PUBLIC cxx_std_20) # always bump
 target_link_libraries(llama PRIVATE
     ggml
     ${LLAMA_EXTRA_LIBS}
+    libnode.so
+#        libv8.so
+#	libv8_libbase.so
+#	libv8_libplatform.so
+#	libv8_libsampler.so
     )
 
 if (BUILD_SHARED_LIBS)
@@ -778,3 +926,41 @@ if (LLAMA_BUILD_EXAMPLES)
     add_subdirectory(examples)
     add_subdirectory(pocs)
 endif()
+
+set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
+
+
+	
+find_package(OCaml REQUIRED)
+include(UseOCaml)
+find_ocaml_package(extlib)
+
+# add_ocaml_library(common
+#   SOURCES message_node file_node files io
+#   PACKAGES unix str extlib
+#   )
+
+# add_ocaml_executable(loc
+#   SOURCES file_statistics loc
+#   LIBRARIES common
+#   )
+
+
+
+set(CMAKE_C_FLAGS                  "${CMAKE_C_FLAGS}                  -Wall -Wextra -fno-strict-aliasing -fPIC")
+
+#target_link_libraries(${LIBRARY_NAME} ${SDL2_LIBRARIES} ${SDL2IMAGE_LIBRARIES} ${SDL2GFX_LIBRARIES} ${SDL2MIXER_LIBRARIES} ${SDL2TTF_LIBRARIES} ${OPENGL_LIBRARIES} ${GLEW_LIBRARIES} dl m )
+
+file(GLOB OCAML_SCRIPT_SOURCES
+    "${CMAKE_CURRENT_SOURCE_DIR}/caml_src/*.ml"
+)
+
+#WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/build"
+add_custom_target("ocaml_script" "ocamlopt" "-g" "-fPIC" "-linkall" "-output-obj" "${OCAML_SCRIPT_SOURCES}" "-o" "${CMAKE_CURRENT_SOURCE_DIR}/build2/ocaml-example-script.o"  VERBATIM SOURCES ${OCAML_SCRIPT_SOURCES})
+
+#nm /usr/local/lib/ocaml/libcamlrun_pic.a |grep unbox
+#ocamlc -output-obj -o embed_out.c
+#/usr/local/bin/ocamlc ../caml_src/step.ml   -output-obj -o embed_out.c
+
+
+#/usr/local/bin/ocamlc caml_src/step.ml   -output-obj -o embed_out.c

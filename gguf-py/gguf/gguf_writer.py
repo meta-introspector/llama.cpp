@@ -57,9 +57,9 @@ class GGUFWriter:
         self.endianess = endianess
         self.offset_tensor = 0
         self.data_alignment = GGUF_DEFAULT_ALIGNMENT
-        self.kv_data = b""
+        self.kv_data = bytearray()
         self.kv_data_count = 0
-        self.ti_data = b""
+        self.ti_data = bytearray()
         self.ti_data_count = 0
         self.use_temp_file = use_temp_file
         self.temp_file = None
@@ -221,7 +221,7 @@ class GGUFWriter:
         if self.endianess == GGUFEndian.BIG:
             tensor.byteswap(inplace=True)
         if self.use_temp_file and self.temp_file is None:
-            fp = tempfile.SpooledTemporaryFile(mode="w+b", max_size=256*1024*1024)
+            fp = tempfile.SpooledTemporaryFile(mode="w+b", max_size=256 * 1024 * 1024)
             fp.seek(0)
             self.temp_file = fp
 
@@ -398,6 +398,9 @@ class GGUFWriter:
 
     def add_add_eos_token(self, value: bool) -> None:
         self.add_bool(Keys.Tokenizer.ADD_EOS, value)
+
+    def add_chat_template(self, value: str) -> None:
+        self.add_string(Keys.Tokenizer.CHAT_TEMPLATE, value)
 
     def _pack(self, fmt: str, value: Any, skip_pack_prefix: bool = False) -> bytes:
         pack_prefix = ''
