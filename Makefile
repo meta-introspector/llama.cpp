@@ -593,8 +593,12 @@ main: examples/main/main.cpp  ocaml-example-script.o plugin_nodejs.o  plugin_oca
 	@echo '====  Run ./main -h for help.  ===='
 	@echo
 #nasty hack
+# one of -pack, -a, -shared, -c, -output-obj
 ocaml-example-script.o: caml_src/step.ml
-	ocamlfind ocamlopt -thread -linkpkg \
+	ocamlfind ocamlopt -verbose  -S -with-runtime -thread -linkpkg \
+	  -cclib -L/usr/lib/x86_64-linux-gnu/ \
+	-with-runtime \
+	-output-complete-obj \
 	-package  coq-core \
 	-package  coq \
 	-package coq-serapi  \
