@@ -601,6 +601,7 @@ ocaml-example-script.o: caml_src/step.ml
 	-output-complete-obj \
 	-package  coq-core \
 	-package  coq \
+	-verbose \
 	-package coq-serapi  \
 	-package coq-serapi.serlib \
 	-package coq-serapi.sertop_v8_12 \
