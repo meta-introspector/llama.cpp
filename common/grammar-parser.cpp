@@ -41,8 +41,11 @@ namespace grammar_parser {
             uint32_t      rule_id,
             const std::vector<llama_grammar_element> & rule) {
         if (state.rules.size() <= rule_id) {
+	  fprintf(stderr, "resize id %d\n",rule_id);
             state.rules.resize(rule_id + 1);
         }
+
+	fprintf(stderr, "adding rule id %d\n",rule_id);
         state.rules[rule_id] = rule;
     }
 
@@ -144,6 +147,7 @@ namespace grammar_parser {
                 while (*pos != '"') {
                     auto char_pair = parse_char(pos);
                          pos       = char_pair.second;
+
                     out_elements.push_back({LLAMA_GRETYPE_CHAR, char_pair.first});
                 }
                 pos = parse_space(pos + 1, is_nested);
