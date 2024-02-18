@@ -1,7 +1,8 @@
 cmake_minimum_required(VERSION 3.14)  # for add_link_options and implicit target directories.
 project("llama.cpp" C CXX)
-include(CheckIncludeFileCXX)
 
+include(CheckIncludeFileCXX)
+set(CMAKE_CUDA_COMPILER "/usr/local/cuda-12.3/bin/nvcc")
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 if (NOT XCODE AND NOT MSVC AND NOT CMAKE_BUILD_TYPE)
@@ -89,8 +90,8 @@ endif()
 option(LLAMA_ACCELERATE                      "llama: enable Accelerate framework"               ON)
 option(LLAMA_BLAS                            "llama: use BLAS"                                  OFF)
 set(LLAMA_BLAS_VENDOR "Generic" CACHE STRING "llama: BLAS library vendor")
-option(LLAMA_CUBLAS                          "llama: use CUDA"                                  OFF)
-#option(LLAMA_CUDA_CUBLAS                     "llama: use cuBLAS for prompt processing"          OFF)
+option(LLAMA_CUBLAS                          "llama: use CUDA"                                  ON)
+option(LLAMA_CUDA_CUBLAS                     "llama: use cuBLAS for prompt processing"          ON)
 option(LLAMA_CUDA_FORCE_DMMV                 "llama: use dmmv instead of mmvq CUDA kernels"     OFF)
 option(LLAMA_CUDA_FORCE_MMQ                  "llama: use mmq kernels instead of cuBLAS"         OFF)
 set(LLAMA_CUDA_DMMV_X      "32" CACHE STRING "llama: x stride for dmmv CUDA kernels")
@@ -330,14 +331,17 @@ if (LLAMA_QKK_64)
     add_compile_definitions(GGML_QKK_64)
 endif()
 
-if (LLAMA_CUBLAS)
+
     cmake_minimum_required(VERSION 3.17)
 
     find_package(CUDAToolkit)
+    set(CMAKE_CUDA_ARCHITECTURES "60;61;70") # needed for f16 CUDA intrinsics	
+        enable_language(CUDA)	
+
     if (CUDAToolkit_FOUND)
         message(STATUS "cuBLAS found")
 
-        enable_language(CUDA)
+
 
         set(GGML_HEADERS_CUDA ggml-cuda.h)
         set(GGML_SOURCES_CUDA ggml-cuda.cu)
@@ -390,7 +394,7 @@ if (LLAMA_CUBLAS)
     else()
         message(WARNING "cuBLAS not found")
     endif()
-endif()
+
 
 if (LLAMA_MPI)
     cmake_minimum_required(VERSION 3.10)
