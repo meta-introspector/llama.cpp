@@ -278,6 +278,7 @@ namespace grammar_parser {
             while (*pos) {
                 pos = parse_rule(state, pos);
             }
+	    print_grammar(stderr,state);
             return state;
         } catch (const std::exception & err) {
             fprintf(stderr, "%s: error parsing grammar: %s\n", __func__, err.what());
@@ -403,10 +404,10 @@ namespace grammar_parser {
                 symbol_id_names[kv.second] = kv.first;
             }
             for (size_t i = 0, end = state.rules.size(); i < end; i++) {
-                // fprintf(file, "%zu: ", i);
-                // print_rule_binary(file, state.rules[i]);
+                fprintf(file, "%zu: ", i);
+                print_rule_binary(file, state.rules[i]);
                 print_rule(file, uint32_t(i), state.rules[i], symbol_id_names);
-                // fprintf(file, "\n");
+                fprintf(file, "\n");
             }
         } catch (const std::exception & err) {
             fprintf(stderr, "\n%s: error printing grammar: %s\n", __func__, err.what());

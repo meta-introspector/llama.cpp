@@ -8995,6 +8995,7 @@ static void llama_grammar_advance_stack(
     switch (pos->type) {
         case LLAMA_GRETYPE_RULE_REF: {
             const size_t                  rule_id = static_cast<size_t>(pos->value);
+	    fprintf(stderr, "RULE SHIFT:%ld\n", rule_id);
             const llama_grammar_element * subpos  = rules[rule_id].data();
             do {
                 // init new stack without the top (pos)
@@ -9060,8 +9061,39 @@ static std::vector<std::vector<const llama_grammar_element *>> llama_grammar_acc
             }
             llama_grammar_advance_stack(rules, new_stack, new_stacks);
         }
+	else
+	  {
+	    const llama_grammar_element * pos = stack.back();	    
+	    switch (pos->type) {
+	    case LLAMA_GRETYPE_RULE_REF: {
+	      const size_t                  rule_id = static_cast<size_t>(pos->value);
+	      fprintf(stderr, "RULE FAILED:%ld char:%c\n", rule_id, chr);
+	    };
+	      break;
+	    case LLAMA_GRETYPE_ALT:
+		fprintf(stderr, "something 1FAILED:%d %u char:%c\n", pos->type, pos->value, chr);
+		break;
+	    case LLAMA_GRETYPE_CHAR:
+	      fprintf(stderr, "CHAR FAILED:want:'%c' get:'%c'\n",
+		      pos->value,
+		      chr);
+	      break;
+	    case LLAMA_GRETYPE_CHAR_NOT:
+	      fprintf(stderr, "something 3 FAILED:%d %u char:%c\n", pos->type, pos->value, chr);
+	      break;
+	    case LLAMA_GRETYPE_CHAR_RNG_UPPER:
+	      fprintf(stderr, "something 4 FAILED:%d %u char:%c\n", pos->type, pos->value, chr);
+	      break;
+	    case LLAMA_GRETYPE_CHAR_ALT:
+	      fprintf(stderr, "something 5 FAILED:%d %u char:%c\n", pos->type, pos->value, chr);
+	     break;
+	    case LLAMA_GRETYPE_END:
+	      fprintf(stderr, "something 6 FAILED:%d %u char:%c\n", pos->type, pos->value, chr);
+	     break;
+	    
+	    }// switch
+	  }
     }
-
     return new_stacks;
 }
 
