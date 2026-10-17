@@ -1,0 +1,41 @@
+diff --git a/lean/schedulers/account-worker-modules/coprime-scheduler.mjs b/lean/schedulers/account-worker-modules/coprime-scheduler.mjs
+index 7e429b32..7e40de76 100644
+--- a/lean/schedulers/account-worker-modules/coprime-scheduler.mjs
++++ b/lean/schedulers/account-worker-modules/coprime-scheduler.mjs
+@@ -67,11 +67,14 @@ export function modInverse(a, m) {
+  * Computes the optimal step size for coprime round-robin scheduling.
+  * The step must be coprime to NUM_WORKERS to ensure uniform distribution.
+  */
+-export function coprimeStep(workerIndex, numWorkers = NUM_WORKERS) {
+-  if (numWorkers <= 1) return 1;
+-  // Find the smallest step > 0 that is coprime to numWorkers
+-  let step = 1;
+-  while (gcd(step, numWorkers) !== 1) {
++export function coprimeStep(workerIndex, numWorkers = NUM_WORKERS, modulus = numWorkers) {
++  if (modulus <= 1) return 1;
++  // Use workerIndex to select different coprime steps for different workers.
++  // The step must be coprime to `modulus` (numTargets in workerVisitOrder,
++  // numWorkers in general) to ensure uniform, collision-free distribution.
++  // Starting from workerIndex+2 ensures variation across workers (step > 1).
++  let step = workerIndex + 2;
++  while (gcd(step, modulus) !== 1) {
+     step++;
+   }
+   return step;
+@@ -89,7 +92,7 @@ export function coprimeStep(workerIndex, numWorkers = NUM_WORKERS) {
+  */
+ export function workerVisitOrder(workerIndex, numWorkers = NUM_WORKERS, numTargets = targetCount()) {
+   const order = [];
+-  const step = coprimeStep(workerIndex, numWorkers);
++  const step = coprimeStep(workerIndex, numWorkers, numTargets);
+   
+   for (let i = 0; i < numTargets; i++) {
+     // Each worker visits targets in a coprime-modular order
+@@ -151,6 +154,6 @@ export function validateConfiguration() {
+ export function nextTargetForSlot(workerIndex, slotIndex, periodMs = 14400000) {
+   const total = targetCount();
+   if (!total) return -1;                       // no config pushed → no target
+-  const step = coprimeStep(workerIndex);
++  const step = coprimeStep(workerIndex, NUM_WORKERS, total);
+   return (slotIndex * step + workerIndex) % total;
+ }

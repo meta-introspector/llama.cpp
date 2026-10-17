@@ -155,6 +155,7 @@
                 vulkan = config.packages.default.override { useVulkan = true; };
                 windows = config.legacyPackages.llamaPackagesWindows.llama-cpp;
                 python-scripts = config.legacyPackages.llamaPackages.python-scripts;
+                llama-worker-twin = config.legacyPackages.llamaPackages.llama-worker-twin;
               }
               // lib.optionalAttrs pkgs.stdenv.isLinux {
                 cuda = config.legacyPackages.llamaPackagesCuda.llama-cpp;

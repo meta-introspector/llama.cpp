@@ -1,0 +1,41 @@
+# Lean Worker Twin Configuration for llama.cpp
+
+[worker]
+name = "llama-worker-twin"
+description = "AI-enhanced mathematical reasoning twin"
+version = "0.1.0"
+repository = "https://github.com/ggml-org/llama.cpp/tree/master/lean-worker-twin"
+
+[model]
+path = "./models/math-llama-gguf"
+context_size = 2048
+max_tokens = 1024
+temperature = 0.7
+top_k = 40
+top_p = 0.9
+repeat_penalty = 1.1
+seed = 12345
+
+[inference]
+n_threads = 4
+n_batch = 8
+enable_logging = false
+
+[proof_assistance]
+enabled = true
+max_conjectures = 10
+max_proof_steps = 500
+proof_sketch_prompt_template = "Generate proof sketch for: {theorem}\nProof:\n"
+conjecture_prompt_template = "Generate conjecture in {area}:\nConjecture: "
+step_validation_prompt_template = "Validate this proof step: {step}\nCurrent proof: {proof}\nAnswer yes or no:"
+
+[capabilities]
+proof_sketch = true
+conjecture_generation = true
+step_validation = true
+translation = true
+
+[union_integration]
+enabled = false
+union_url = "https://lean-workers-union.oneapp.dev/union/llama/"
+submit_on_ready = true

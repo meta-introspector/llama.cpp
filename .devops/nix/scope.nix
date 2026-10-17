@@ -1,35 +1,85 @@
 {
-  lib,
-  newScope,
-  python3,
-  llamaVersion ? "0.0.0",
-}:
+  description = "Llama Worker Twin for AI-enhanced mathematical reasoning";
 
-let
-  pythonPackages = python3.pkgs;
-in
-
-# We're using `makeScope` instead of just writing out an attrset
-# because it allows users to apply overlays later using `overrideScope'`.
-# Cf. https://noogle.dev/f/lib/makeScope
-
-lib.makeScope newScope (self: {
-  inherit llamaVersion;
-  gguf-py = self.callPackage ./package-gguf-py.nix {
-    inherit (pythonPackages)
-      numpy
-      tqdm
-      sentencepiece
-      pyyaml
-      pytestCheckHook
-      requests
-      buildPythonPackage
-      poetry-core
-      ;
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    flake-utils.url = "github:numtide/flake-utils";
   };
-  python-scripts = self.callPackage ./python-scripts.nix { inherit (pythonPackages) buildPythonPackage poetry-core; };
-  llama-cpp = self.callPackage ./package.nix { };
-  docker = self.callPackage ./docker.nix { };
-  docker-min = self.callPackage ./docker.nix { interactive = false; };
-  sif = self.callPackage ./sif.nix { };
-})
+
+  outputs = { self, nixpkgs, flake-utils }:
+    flake-utils.lib.eachDefaultSystem (system:
+      let
+        pkgs = import nixpkgs { inherit system; };
+      in
+      {
+        packages = {
+          # Main package - copies lean source files for Lean build
+          llama-worker-twin = pkgs.runCommand "llama-worker-twin" {
+            src = builtins.path {
+              path = ./lean-worker-twin;
+              filter = path: type:
+                (type == "regular" || type == "directory") &&
+                (lib.hasSuffix ".lean" (toString path) ||
+                 lib.hasSuffix ".toml" (toString path) ||
+                 lib.hasSuffix ".nix" (toString path) ||
+                 lib.hasSuffix ".md" (toString path));
+            };
+          } ''
+            mkdir -p $out/src
+            cp -r $src/src $out/
+            cp -r $src/examples $out/
+            cp $src/*.toml $out/
+            cp $src/*.md $out/
+            cp $src/*.nix $out/
+          '';
+
+          # Lean 4 with lake toolchain
+          lean4 = pkgs.lean4;
+
+          # Build with Lean
+          llama-worker-twin-lean = pkgs.runCommand "llama-worker-twin-lean" {
+            nativeBuildInputs = [ pkgs.lake pkgs.lean4 ];
+          } ''
+            mkdir -p $out
+            cd $out
+            cp -r ${./lean-worker-twin}/* .
+            ln -s ${pkgs.lake}/bin/lake .
+            ln -s ${pkgs.lean4}/bin/lean .
+            lake update
+            lake build
+          '';
+        };
+
+        devShells = {
+          default = pkgs.mkShell {
+            name = "llama-worker-twin-dev";
+            buildInputs = [
+              pkgs.lake
+              pkgs.lean4
+              pkgs.cabal-install
+              pkgs.ghc
+              pkgs.python3
+              pkgs.ruff
+              pkgs.mypy
+            ];
+            shellHook = ''
+              echo "🦙 Llama Worker Twin Development Environment"
+              cd ${./lean-worker-twin}
+              echo "  - Run: lake build"
+              echo "  - Run: lake run basic_usage"
+            '';
+          };
+        };
+
+        checks = {
+          build-check = pkgs.runCommand "build-check" { } ''
+            cd ${./lean-worker-twin}
+            ln -sf ${pkgs.lake}/bin/lake .
+            ln -sf ${pkgs.lean4}/bin/lean .
+            lake update
+            lake build
+            touch $out
+          '';
+        };
+      });
+}

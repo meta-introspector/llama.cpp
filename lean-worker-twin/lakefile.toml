@@ -1,0 +1,14 @@
+# Lakefile for Llama Worker Twin Lean module
+
+name = "llama-worker-twin"
+version = "0.1.0"
+srcDir = "src"
+defaultTargets = ["llama_worker_twin"]
+
+[[lean_exe]]
+name = "llama_worker_twin"
+root = "llama_worker_twin"
+
+[[lean_lib]]
+name = "LlamaWorkerTwin"
+roots = ["LlamaWorkerTwin"]
