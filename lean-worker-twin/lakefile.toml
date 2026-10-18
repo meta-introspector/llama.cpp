@@ -9,6 +9,10 @@ defaultTargets = ["llama_worker_twin"]
 name = "llama_worker_twin"
 root = "llama_worker_twin"
 
+[[lean_exe]]
+name = "gokujo-git-layer"
+root = "GokujoGitLayer"
+
 [[lean_lib]]
 name = "LlamaWorkerTwin"
 roots = ["LlamaWorkerTwin"]
